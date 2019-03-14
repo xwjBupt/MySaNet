@@ -18,6 +18,8 @@ from util.Timer import Timer
 from util.lr import *
 from util.lib import eva_model
 import shutil
+from src.FLF import *
+from src.scale_dense_net import *
 
 
 
@@ -78,7 +80,7 @@ if __name__ == '__main__':
     best_mse = float('inf')
     finetune = False
     dataset = 'ShTARaw'
-    method = 'rgb-randomcrop-geo'
+    method = 'FLF-rgb-randomcrop-fix'
     resume = False
     startepoch = 0
     current_dir = os.getcwd()
@@ -113,26 +115,29 @@ if __name__ == '__main__':
     valim_file = '/media/xwj/Data/DataSet/shanghai_tech/original/part_A_final/test_data/images'
     valgt_file = '/media/xwj/Data/DataSet/shanghai_tech/original/part_A_final/test_data/ground_truth'
 
-    train_data = SHTech(imdir = trainim_file,gtdir=traingt_file,transform= 0.5,train=True,test = False,raw = True)
-    val_data = SHTech(imdir = valim_file,gtdir=valgt_file,train = False,test = True)
+    train_data = SDNSHTech(imdir = trainim_file,gtdir=traingt_file,transform= 0.5,train=True,test = False,raw = True)
+    val_data = SDNSHTech(imdir = valim_file,gtdir=valgt_file,train = False,test = True)
 
     train_loader = DataLoader(train_data,batch_size=1,shuffle=True,num_workers=0)
     val_loader = DataLoader(val_data,batch_size=1,shuffle=False,num_workers=0)
 
 
-    net = SANet(gray = False)
+    logger.info(method)
+    net =FLF(gray=False)
+
+    # writer.add_graph(net,input_to_model= dumy)
 
 
     if resume:
-        cprint('=> loading checkpoint : ./rgb-randomcrop/model/modelbest_loss_cut_rgb-randomcrop.tar ',color='yellow')
-        checkpoint = torch.load(current_dir +'/rgb-randomcrop/model/modelbest_loss_cut_rgb-randomcrop.tar')
+        cprint('=> loading checkpoint : ./sdn-rgb-randomcrop/model/best_loss_cut_sdn-rgb-randomcrop.tar ',color='yellow')
+        checkpoint = torch.load(current_dir +'/sdn-rgb-randomcrop/model/best_loss_cut_sdn-rgb-randomcrop.tar')
         startepoch = checkpoint['epoch']
         best_loss = checkpoint['best_loss']
         net.load_state_dict(checkpoint['state_dict'])
         # lr = checkpoint['lr']
         cprint("=> loaded checkpoint ",color='yellow')
 
-    optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, net.parameters()), lr=lr)
+    optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, net.parameters()),momentum=0.9, lr=lr,weight_decay=0.005)
     net.cuda()
     net.train()
 
@@ -151,7 +156,7 @@ if __name__ == '__main__':
         startepoch = 0
 
     logger.info(method)
-    for epoch in range(0,epochs):
+    for epoch in range(startepoch,epochs):
         trainmae = 0.
         trainmse = 0.
         valmae =0.
@@ -230,12 +235,12 @@ if __name__ == '__main__':
                 #     showimg = vutil.make_grid(show, normalize=True, scale_each=True, padding=4, nrow=3,pad_value=255)
                 #     writer.add_image('Val-Image', showimg, index/50)
 
-                if index % 60 ==0 and epoch % 200 == 0 :
+                if index % 50 ==0 and epoch % 100 == 0 :
 
-                    # showimg = vutil.make_grid(timg, normalize=True, scale_each=True, padding=4,nrow=5)
-                    # showden = vutil.make_grid(tes_den, normalize=True, scale_each=True, padding=4, pad_value=255,nrow=5)
-                    # writer.add_image('Image', showimg, index)
-                    # writer.add_image('density', showden, index)
+                    showimg = vutil.make_grid(timg, normalize=True, scale_each=True, padding=4,nrow=5)
+                    showden = vutil.make_grid(tes_den, normalize=True, scale_each=True, padding=4, pad_value=255,nrow=5)
+                    writer.add_image('Image', showimg, index)
+                    writer.add_image('density', showden, index)
 
                     plt.subplot(131)
                     plt.title('raw image')

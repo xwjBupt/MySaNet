@@ -121,7 +121,4 @@ class SANet(nn.Module):
     def forward(self, x):
         features = self.encoder(x)
         out = self.decoder(features)
-
-
-
         return out

@@ -1,9 +1,10 @@
 import cv2
 import math
 import numpy as np
+import scipy.ndimage
 
 
-def get_density_map_gaussian(im, points):
+def get_fix_gaussian(im, points):
     '''
 
     :param im: original image
@@ -70,3 +71,40 @@ def get_density_map_gaussian(im, points):
         im_density = im_density.transpose([1,2,0])
 
     return im_density
+
+
+
+def get_geo_gaussian(im,points,beta=0.3,knn = 4):
+    '''
+    这个方法是找某个人头附近的最近K邻的距离之和的beta倍做为当前此点的高斯核大小
+    :param gt:
+    :return:density map
+    '''
+    gt = np.zeros_like(im, dtype=np.float64)
+    for i in range(0, len(points)):
+        if int(points[i][1]) < im.shape[0] and int(points[i][0]) < im.shape[1]:
+            gt[int(points[i][1]), int(points[i][0]),:] = 1
+    # print(gt.shape)
+    density = np.zeros(gt.shape, dtype=np.float32)
+    gt_count = np.count_nonzero(gt)
+    if gt_count == 0:
+        return density
+
+    pts = np.array(list(zip(np.nonzero(gt)[1], np.nonzero(gt)[0])))
+    leafsize = 2048
+    # build kdtree
+    tree = scipy.spatial.KDTree(pts.copy(), leafsize=leafsize)
+    # query kdtree
+    distances, locations = tree.query(pts, k=knn)
+    #
+    # print('generate density...')
+    for i, pt in enumerate(pts):
+        pt2d = np.zeros(gt.shape, dtype=np.float32)
+        pt2d[pt[1],pt[0]] = 1.
+        if gt_count > 1:
+            sigma = (distances[i][1]+distances[i][2]+distances[i][3])*beta
+        else:
+            sigma = np.average(np.array(gt.shape))/2./2. #case: 1 point
+        density += scipy.ndimage.filters.gaussian_filter(pt2d, sigma, mode='constant')
+    return density
+    # print('done.')
