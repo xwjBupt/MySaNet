@@ -63,6 +63,7 @@ def weights_normal_init(model, dev=0.01):
 
 if __name__ == '__main__':
 
+    device_ids = [0, 1, 2, 3]
 
 
     save = 50
@@ -125,6 +126,7 @@ if __name__ == '__main__':
     logger.info(method)
     net =FLF(gray=False)
 
+
     # writer.add_graph(net,input_to_model= dumy)
 
 
@@ -138,8 +140,13 @@ if __name__ == '__main__':
         cprint("=> loaded checkpoint ",color='yellow')
 
     optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, net.parameters()),momentum=0.9, lr=lr,weight_decay=0.005)
-    net.cuda()
-    net.train()
+    if torch.cuda.device_count()>1:
+        net = net.cuda(device_ids[0])
+        net = nn.DataParallel(net,device_ids = device_ids)
+        optimizer = nn.DataParallel(optimizer,device_ids = device_ids)
+    else:
+        net.cuda()
+        net.train()
 
     if finetune:
         # for i in [0, 2, 4]:
@@ -171,8 +178,8 @@ if __name__ == '__main__':
         net.train()
         for index,(img,den) in tqdm(enumerate(train_loader)):
             step +=1
-            img = img.cuda()
-            den = den.cuda()
+            img = img.cuda(device_ids[0])
+            den = den.cuda(device_ids[0])
             es_den = net(img,den)
 
             # if index % 100 and epoch % 200 == 0:
@@ -183,7 +190,10 @@ if __name__ == '__main__':
             loss = net.loss
             optimizer.zero_grad()
             loss.backward()
-            optimizer.step()
+            if torch.cuda.device_count>1:
+                optimizer.module.step()
+            else:
+                optimizer.step()
             trainloss.update(loss.item(), img.shape[0])
 
 
