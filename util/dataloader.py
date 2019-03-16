@@ -203,7 +203,7 @@ class SHTech(Dataset):
 
 class SDNSHTech(Dataset):
 
-    def __init__(self,imdir,gtdir,transform = 0,train = True,test = False,raw = False,num_cut = 4,geo = False):
+    def __init__(self,imdir,gtdir,transform = 0,train = True,test = False,raw = False,num_cut = 2,geo = False):
         self.imdir = imdir
         self.gtdir = gtdir
         self.train = train

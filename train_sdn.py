@@ -63,7 +63,7 @@ def weights_normal_init(model, dev=0.01):
 
 if __name__ == '__main__':
 
-    device_ids = [0, 1, 2, 3]
+    device_ids = [0, 1, ]
 
 
     save = 50
@@ -140,13 +140,19 @@ if __name__ == '__main__':
         cprint("=> loaded checkpoint ",color='yellow')
 
     optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, net.parameters()),momentum=0.9, lr=lr,weight_decay=0.005)
+    LOSS = Myloss()
+
     if torch.cuda.device_count()>1:
         net = net.cuda(device_ids[0])
         net = nn.DataParallel(net,device_ids = device_ids)
         optimizer = nn.DataParallel(optimizer,device_ids = device_ids)
+        LOSS = LOSS.cuda(device_ids[0])
+        LOSS = nn.DataParallel(LOSS, device_ids=device_ids)
+
     else:
         net.cuda()
         net.train()
+        LOSS.cuda()
 
     if finetune:
         # for i in [0, 2, 4]:
@@ -163,6 +169,8 @@ if __name__ == '__main__':
         startepoch = 0
 
     logger.info(method)
+
+
     for epoch in range(startepoch,epochs):
         trainmae = 0.
         trainmse = 0.
@@ -187,14 +195,14 @@ if __name__ == '__main__':
             #     showimg = vutil.make_grid(show, normalize=True, scale_each=True, padding=4, nrow=4,pad_value=255)
             #     writer.add_image('Train-Image', showimg, index/5)
 
-            loss = net.loss
+            myloss = LOSS(es_den,den)
             optimizer.zero_grad()
-            loss.backward()
-            if torch.cuda.device_count>1:
+            myloss.backward()
+            if torch.cuda.device_count()>1:
                 optimizer.module.step()
             else:
                 optimizer.step()
-            trainloss.update(loss.item(), img.shape[0])
+            trainloss.update(myloss.item(), img.shape[0])
 
 
             es_count = np.sum(es_den[0][0].cpu().detach().numpy())

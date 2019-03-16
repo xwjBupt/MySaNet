@@ -94,8 +94,8 @@ class FLF(nn.Module):
         if log is not None:
             self.log = log
 
-        self.LE = nn.MSELoss(reduction='elementwise_mean')
-        self.SSIM = SSIM(in_channel=3, window_size=11, size_average=True)
+        # self.LE = nn.MSELoss(reduction='elementwise_mean')
+        # self.SSIM = SSIM(in_channel=3, window_size=11, size_average=True)
         dense = vision.models.densenet121(pretrained=True)
         backbone1 = nn.Sequential(dense.features[0:3])
         backbone2 = nn.Sequential(dense.features[4:6])
@@ -135,9 +135,9 @@ class FLF(nn.Module):
         self.FinalConv1 = BasicConv(in_channels=8,out_channels=4,use_bn=True,kernel_size=3,stride=1,padding=1)
         self.FinalConv2 = BasicConv(in_channels=4,out_channels=3,use_bn = True,kernel_size=1,stride=1)
 
-    @property
-    def loss(self):
-        return self.loss_E + 0.001 * self.loss_C
+    # @property
+    # def loss(self):
+    #     return self.loss_E + 0.001 * self.loss_C
 
     def  forward(self, x,gt_map):
         x1 = self.Backbone1(x)
@@ -161,10 +161,24 @@ class FLF(nn.Module):
         final1 = self.FinalConv1(up3)
         es_map = self.FinalConv2(final1)
 
-        if self.training:
-            self.loss_E = self.LE(es_map, gt_map)
-            self.loss_C = 1 - self.SSIM(es_map, gt_map)
+        # if self.training:
+        #     self.loss_E = self.LE(es_map, gt_map)
+        #     self.loss_C = 1 - self.SSIM(es_map, gt_map)
         return es_map
+
+class Myloss(nn.Module):
+    def __init__(self):
+        super(Myloss, self).__init__()
+        self.LE = nn.MSELoss(reduction='elementwise_mean')
+        self.SSIM = SSIM(in_channel=3, window_size=11, size_average=True)
+
+    def forward(self,es_map,gt_map):
+        self.loss_E = self.LE(es_map, gt_map)
+        self.loss_C = 1 - self.SSIM(es_map, gt_map)
+        my_loss = self.loss_E + 0.001 * self.loss_C
+
+        return my_loss
+
 
 
 
