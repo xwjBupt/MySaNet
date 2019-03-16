@@ -116,11 +116,11 @@ if __name__ == '__main__':
     valim_file = '/media/xwj/Data/DataSet/shanghai_tech/original/part_A_final/test_data/images'
     valgt_file = '/media/xwj/Data/DataSet/shanghai_tech/original/part_A_final/test_data/ground_truth'
 
-    train_data = SDNSHTech(imdir = trainim_file,gtdir=traingt_file,transform= 0.5,train=True,test = False,raw = True)
+    train_data = SDNSHTech(imdir = trainim_file,gtdir=traingt_file,transform= 0.5,train=True,test = False,raw = True,num_cut=2)
     val_data = SDNSHTech(imdir = valim_file,gtdir=valgt_file,train = False,test = True)
 
     train_loader = DataLoader(train_data,batch_size=1,shuffle=True,num_workers=0)
-    val_loader = DataLoader(val_data,batch_size=1,shuffle=False,num_workers=0)
+    val_loader = DataLoader(val_data,batch_size=2,shuffle=False,num_workers=0)
 
 
     logger.info(method)
@@ -186,6 +186,12 @@ if __name__ == '__main__':
         net.train()
         for index,(img,den) in tqdm(enumerate(train_loader)):
             step +=1
+            # if torch.cuda.device_count()>1:
+            #     img = img.cuda(device_ids[0])
+            #     den = den.cuda(device_ids[0])
+            #     img = nn.DataParallel(img, device_ids=device_ids)
+            #     den = nn.DataParallel(den, device_ids=device_ids)
+            # else:
             img = img.cuda(device_ids[0])
             den = den.cuda(device_ids[0])
             es_den = net(img,den)
