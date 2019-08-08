@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from util.lib import *
 import sys
-from util.dataloader import *
+from util.mydataset import *
 from src.Net import *
 from src.net import SANet as newSa
 import tqdm

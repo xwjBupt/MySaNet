@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from util.lib import *
 import sys
-from util.dataloader import *
+from util.mydataset import *
 from src.Net import *
 from src.net import SANet as newSa
 import tqdm
@@ -15,7 +15,7 @@ from util.mcnn_loader import ImageDataLoader
 from src.MCNN import *
 from util.Timer import Timer
 from util.lr import *
-
+from util.mydataset import *
 
 class AverageMeter(object):
   """Computes and stores the average and current value"""

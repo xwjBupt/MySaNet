@@ -2,7 +2,7 @@ import torch
 
 def get_learning_rate(optimizer):
     lr=[]
-    if torch.cuda.device_count>1:
+    if torch.cuda.device_count()>1:
         for param_group in optimizer.module.param_groups:
            lr +=[ param_group['lr'] ]
 

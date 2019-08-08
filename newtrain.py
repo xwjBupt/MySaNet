@@ -3,7 +3,7 @@ import torch.nn as nn
 import torchvision.utils as vutil
 from util.lib import *
 import sys
-from util.dataloader import *
+from util.mydataset import *
 from src.Net import *
 from src.net import SANet as newSa
 import tqdm
@@ -18,7 +18,8 @@ from util.Timer import Timer
 from util.lr import *
 from util.lib import eva_model
 import shutil
-
+from util.mydataset import *
+from src.can import *
 
 
 
@@ -78,7 +79,7 @@ if __name__ == '__main__':
     best_mse = float('inf')
     finetune = False
     dataset = 'ShTARaw'
-    method = 'rgb-randomcrop-geo'
+    method = 'can_720_zero'
     resume = False
     startepoch = 0
     current_dir = os.getcwd()
@@ -108,16 +109,18 @@ if __name__ == '__main__':
     logger.addHandler(fh)
     logger.addHandler(ch)
 
-    trainim_file = '/media/xwj/Data/DataSet/shanghai_tech/original/part_A_final/train_data/images'
-    traingt_file = '/media/xwj/Data/DataSet/shanghai_tech/original/part_A_final/train_data/ground_truth'
-    valim_file = '/media/xwj/Data/DataSet/shanghai_tech/original/part_A_final/test_data/images'
-    valgt_file = '/media/xwj/Data/DataSet/shanghai_tech/original/part_A_final/test_data/ground_truth'
+    trainim_file = '/media/xwj/xwjdata1TA/Dataset/vehicle/train_set/images'
+    traingt_file = '/media/xwj/xwjdata1TA/Dataset/vehicle/train_set/ground_truth'
+    valim_file = '/media/xwj/xwjdata1TA/Dataset/vehicle/val_set/images'
+    valgt_file = '/media/xwj/xwjdata1TA/Dataset/vehicle/val_set/ground_truth'
 
-    train_data = SHTech(imdir = trainim_file,gtdir=traingt_file,transform= 0.5,train=True,test = False,raw = True)
-    val_data = SHTech(imdir = valim_file,gtdir=valgt_file,train = False,test = True)
 
-    train_loader = DataLoader(train_data,batch_size=1,shuffle=True,num_workers=0)
-    val_loader = DataLoader(val_data,batch_size=1,shuffle=False,num_workers=0)
+
+    train_data = veichle(trainim_file,traingt_file,preload=True,phase = 'train')
+    val_data = veichle(valim_file,valgt_file,preload=False,phase = 'val')
+
+    train_loader = DataLoader(train_data,batch_size=1,shuffle=True,num_workers=8)
+    val_loader = DataLoader(val_data,batch_size=1,shuffle=False,num_workers=8)
 
 
     net = SANet(gray = False)
@@ -168,12 +171,8 @@ if __name__ == '__main__':
             step +=1
             img = img.cuda()
             den = den.cuda()
-            es_den = net(img,den)
 
-            # if index % 100 and epoch % 200 == 0:
-            #     show = torch.cat((img,den,es_den),0)
-            #     showimg = vutil.make_grid(show, normalize=True, scale_each=True, padding=4, nrow=4,pad_value=255)
-            #     writer.add_image('Train-Image', showimg, index/5)
+            es_den = net(img,den)
 
             loss = net.loss
             optimizer.zero_grad()
@@ -206,12 +205,15 @@ if __name__ == '__main__':
         del escount[:]
         del gtcount[:]
 
-        valstart = time.time()
-        step = 0.
+
+
+
+
         with torch.no_grad():
             net.eval()
+            time_stamp = 0.0
             for index,(timg,tden) in tqdm(enumerate(val_loader)):
-                step+=1
+                start = time.time()
                 timg = timg.cuda()
                 tden = tden.cuda()
                 tes_den = net(timg, tden)
@@ -225,17 +227,10 @@ if __name__ == '__main__':
                 escount.append(tes_count)
                 gtcount.append(tgt_count)
 
-                # if index % 90 and epoch % 200 == 0:
-                #     show = torch.cat((timg,tden,tes_den),0)
-                #     showimg = vutil.make_grid(show, normalize=True, scale_each=True, padding=4, nrow=3,pad_value=255)
-                #     writer.add_image('Val-Image', showimg, index/50)
-
+                durantion = time.time()-start
+                time_stamp+=durantion
                 if index % 60 ==0 and epoch % 200 == 0 :
 
-                    # showimg = vutil.make_grid(timg, normalize=True, scale_each=True, padding=4,nrow=5)
-                    # showden = vutil.make_grid(tes_den, normalize=True, scale_each=True, padding=4, pad_value=255,nrow=5)
-                    # writer.add_image('Image', showimg, index)
-                    # writer.add_image('density', showden, index)
 
                     plt.subplot(131)
                     plt.title('raw image')
@@ -252,9 +247,7 @@ if __name__ == '__main__':
                     plt.savefig(saveimg+'/epoch{}-step{}.jpg'.format(epoch, index))
 
                     # plt.show()
-
-        durantion = time.time()-valstart
-        valfps = step/durantion
+        valfps = len(val_loader)/time_stamp
 
 
         valmae, valmse = eva_model(escount, gtcount)
@@ -275,15 +268,15 @@ if __name__ == '__main__':
              'lr':get_learning_rate(optimizer)
         }
 
-        if best_loss>valloss.avg:
-            torch.save(losssave, savemodel+'/best_loss_cut_'+method+'.tar')
-            best_loss = valloss.avg
+        # if best_loss>valloss.avg:
+        #     torch.save(losssave, savemodel+'/best_loss_cut_'+method+'.tar')
+        #     best_loss = valloss.avg
         if best_mae>valmae:
             best_mae = valmae
-            torch.save(losssave, savemodel + '/best_loss_mae_' + method + '.tar')
-        if best_mse>valmse:
-            best_mse = valmse
-            torch.save(losssave, savemodel + '/best_loss_mse_' + method + '.tar')
+            torch.save(losssave, savemodel + '/best_loss_mae_' + method + '.pth')
+        # if best_mse>valmse:
+        #     best_mse = valmse
+        #     torch.save(losssave, savemodel + '/best_loss_mse_' + method + '.tar')
 
         writer.add_scalars('data/loss', {
             'trainloss': trainloss.avg,

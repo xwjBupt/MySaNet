@@ -76,3 +76,18 @@ def ssim(img1, img2, window_size=11, size_average=True):
     window = window.type_as(img1)
 
     return _ssim(img1, img2, window, window_size, channel, size_average)
+
+
+class SANetLoss(torch.nn.Module):
+    def __init__(self, in_channels, size = 5, sigma = 1.5, size_average = True):
+        super(SANetLoss, self).__init__()
+        self.ssim_loss = SSIM(in_channels, size, sigma, size_average)
+
+    def forward(self, img1, img2):
+        height = img1.shape[2]
+        width = img1.shape[3]
+        loss_c = self.ssim_loss(img1, img2)
+        loss_e = torch.mean((img1 - img2) ** 2, dim = (0, 1, 2, 3))
+        loss = torch.mul(torch.add(torch.mul(loss_c, 0.001), loss_e),
+                         height * width)
+        return loss
