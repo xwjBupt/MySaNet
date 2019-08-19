@@ -357,12 +357,14 @@ class veichle(Dataset):
         self.PIXEL_STDS = (0.229, 0.224, 0.225)
         self.imgs = []
         self.gts=[]
+        self.name = []
 
         if self.preload:
             for idx in range(self.num_it):
                 if idx %100 == 0:
                     print ('loaded %d/%d imgs'%(idx, self.num_it))
                 imname = self.imnames[idx]
+                self.name.append(imname.split('/')[-1])
                 gtname = imname.replace('images','ground_truth').replace('jpg','h5')
 
                 img = cv2.imread(imname)
@@ -386,12 +388,16 @@ class veichle(Dataset):
                     zoom = np.sum(gt) / np.sum(den)
                     den = den * zoom
 
-                if self.resize is None and self.phase =='test':
-                    ds_rows = int(img.shape[0] // self.down_sample)
-                    ds_cols = int(img.shape[1] // self.down_sample)
-                    zoom = img.shape[0] * img.shape[1] / ds_rows / ds_rows
-                    den = cv2.resize(gt, (ds_cols, ds_rows),interpolation=cv2.INTER_CUBIC)
-                    den = den * zoom
+                if self.resize is not None and self.phase =='test':
+                    new_height = int(self.resize * scale / 8) * 8
+                    rw, rh, _ = img.shape
+                    img = cv2.resize(img, (self.resize, new_height), interpolation=cv2.INTER_CUBIC)
+                    den = gt
+                    # ds_rows = int(img.shape[0] // self.down_sample)
+                    # ds_cols = int(img.shape[1] // self.down_sample)
+                    # zoom = img.shape[0] * img.shape[1] / ds_rows / ds_rows
+                    # den = cv2.resize(gt, (ds_cols, ds_rows),interpolation=cv2.INTER_CUBIC)
+                    # den = den * zoom
 
                 self.imgs.append(img)
                 self.gts.append(den)
@@ -406,11 +412,12 @@ class veichle(Dataset):
         if self.preload:
             img = self.imgs[idx]
             den = self.gts[idx]
+            name = self.name[idx]
 
         else:
-
+            name = self.imnames[idx]
             img = cv2.imread(self.imnames[idx])
-            gtname = self.imnames[idx].replace('images', 'ground_truth').replace('jpg', 'h5')
+            gtname = self.imnames[idx].replace('jpg', 'h5')
 
             img = img[:, :, ::-1].copy()
             img = img.astype(np.float32, copy=False)
@@ -422,7 +429,7 @@ class veichle(Dataset):
             gt = h5py.File(gtname, 'r')['density'].value
             rawcount = np.sum(gt)
 
-            if self.resize is not None and self.down_sample >1:
+            if self.resize is not None and self.down_sample and self.phase!='test' >1:
                 new_height = int(self.resize * scale / 8) * 8
                 rw,rh,_ = img.shape
                 img = cv2.resize(img, (self.resize, new_height),interpolation=cv2.INTER_CUBIC)
@@ -436,12 +443,17 @@ class veichle(Dataset):
                 zoom = np.sum(gt) / np.sum(den)
                 den = den * zoom
 
-            if self.resize is None and self.phase == 'test':
-                ds_rows = int(img.shape[0] // self.down_sample)
-                ds_cols = int(img.shape[1] // self.down_sample)
-                zoom = img.shape[0] * img.shape[1] / ds_rows / ds_rows
-                den = cv2.resize(gt, (ds_cols, ds_rows),interpolation=cv2.INTER_CUBIC)
-                den = den * zoom
+            if self.resize is not None and self.phase == 'test':
+                new_height = int(self.resize * scale / 8) * 8
+                rw, rh, _ = img.shape
+                img = cv2.resize(img, (self.resize,new_height), interpolation=cv2.INTER_CUBIC)
+                den = gt
+
+                # ds_rows = int(img.shape[0] // self.down_sample)
+                # ds_cols = int(img.shape[1] // self.down_sample)
+                # zoom = img.shape[0] * img.shape[1] / ds_rows / ds_rows
+                # den = cv2.resize(gt, (ds_cols, ds_rows),interpolation=cv2.INTER_CUBIC)
+                # den = den * zoom
 
         if self.phase == 'train':
             if random.random() > 0.5:
@@ -455,14 +467,134 @@ class veichle(Dataset):
         img = torch.tensor(img)
         den = torch.tensor(den).unsqueeze(0)
         if self.raw:
-            return img,den,rawcount,self.imnames[idx].split('/')[-1]
+            return img,den,name
         else:
             return img,den
 
+
+
+class veichleDepth(Dataset):
+
+    def __init__(self,imdir,gtdir,phase,preload=False,down = 8,raw = False):
+        self.imdir = imdir
+        self.gtdir = gtdir
+        self.phase = phase
+        self.preload = preload
+        self.down_sample = down
+        self.raw = raw
+
+
+        self.imnames = glob.glob(os.path.join(self.imdir,'*.jpg'))
+        self.imgs = []
+        self.gts = []
+        self.num_it = len(self.imnames)
+        print('Loading data,wait a second')
+        self.PIXEL_MEANS = (0.485, 0.456, 0.406)
+        self.PIXEL_STDS = (0.229, 0.224, 0.225)
+        self.imgs = []
+        self.gts=[]
+        self.name = []
+
+        if self.preload:
+            for idx in range(self.num_it):
+                if idx %100 == 0:
+                    print ('loaded %d/%d imgs'%(idx, self.num_it))
+
+                imname = self.imnames[idx]
+                gtname = self.gtdir + self.imnames[idx].split('/')[-1].replace('.jpg', '_mega_gt.h5')
+                img = cv2.imread(imname)
+                img = img[:, :, ::-1].copy()
+                img = img.astype(np.float32, copy=False)
+                img /= 255.0
+                img -= np.array(self.PIXEL_MEANS)
+                img /= np.array(self.PIXEL_STDS)
+                rh,rw,_ = img.shape
+                img = cv2.resize(img,(1024,768),interpolation=cv2.INTER_CUBIC)
+
+
+                gt = h5py.File(gtname,'r')['density'].value
+
+                if self.down_sample > 1:
+                    ds_rows = int(gt.shape[0] // self.down_sample)
+                    ds_cols = int(gt.shape[1] // self.down_sample)
+                    den = cv2.resize(gt, (ds_cols, ds_rows), interpolation=cv2.INTER_CUBIC)
+                    zoom = np.sum(gt) / np.sum(den)
+                    den = den * zoom
+
+                if self.phase =='test':
+                    rw, rh, _ = img.shape
+                    img = cv2.resize(img, (1024, 768), interpolation=cv2.INTER_CUBIC)
+                    den = gt
+
+
+                self.imgs.append(img)
+                self.gts.append(den)
+                self.name.append(imname)
+
+
+    def __len__(self):
+
+        return self.num_it
+
+    def __getitem__(self, idx):
+
+        if self.preload:
+            img = self.imgs[idx]
+            den = self.gts[idx]
+            name = self.name[idx]
+
+        else:
+            name = self.imnames[idx]
+            img = cv2.imread(self.imnames[idx])
+            # gtname = self.gtdir+self.imnames[idx].split('/')[-1].replace('.jpg','_mega_gt.h5')
+            gtname = self.gtdir + self.imnames[idx].split('/')[-1].replace('.jpg', '_mega_gt.h5')
+            img = img[:, :, ::-1].copy()
+            img = img.astype(np.float32, copy=False)
+            img /= 255.0
+            img -= np.array(self.PIXEL_MEANS)
+            img /= np.array(self.PIXEL_STDS)
+            img = cv2.resize(img, (1024, 768), interpolation=cv2.INTER_CUBIC)
+
+
+
+            gt = h5py.File(gtname, 'r')['density'].value
+            rawcount = np.sum(gt)
+
+            if self.down_sample>1 and self.phase!='test' :
+
+                ds_rows = int(gt.shape[0] // self.down_sample)
+                ds_cols = int(gt.shape[1] // self.down_sample)
+
+                # zoom = gt.shape[0]*gt.shape[1]/ ds_rows / ds_rows
+
+                den = cv2.resize(gt, (ds_cols, ds_rows),interpolation=cv2.INTER_CUBIC)
+                zoom = rawcount/np.sum(den)
+                den = den * zoom
+
+            if  self.phase == 'test':
+                img = cv2.resize(img, (1024,768), interpolation=cv2.INTER_CUBIC)
+                den = gt
+
+        if self.phase == 'train':
+            if random.random() > 0.5:
+                img = cv2.flip(img, 0)
+                den = cv2.flip(den, 0)
+            if random.random() > 0.5:
+                img = cv2.flip(img, 1)
+                den = cv2.flip(den, 1)
+
+        img = img.transpose([2, 0, 1])
+        img = torch.tensor(img)
+        den = torch.tensor(den).unsqueeze(0)
+
+
+        return img,den,name
+
+
 if __name__ == '__main__':
-    trainim_file = '/media/xwj/xwjdata1TA/Dataset/vehicle/train_set/images'
-    traingt_file = '/media/xwj/xwjdata1TA/Dataset/vehicle/train_set/ground_truth'
-    train_data = veichle(trainim_file, traingt_file, preload=False, resize=720, phase='train',raw=True)
+    trainim_file = '/media/xwj/xwjdata1TA/Dataset/vehicle/original/train_set/images/'
+    traingt_file = '/media/xwj/xwjdata1TA/Dataset/vehicle/new_mega_gt/train/'
+    train_data = veichleDepth(trainim_file, traingt_file, preload=False,phase='train',raw=True)
     train_loader = DataLoader(train_data,batch_size=1,shuffle=False,num_workers=0)
     diff = 0.
     plt.ion()  # 开启interactive mode
@@ -482,8 +614,8 @@ if __name__ == '__main__':
         plt.imshow(gt)
         plt.title(gtcount)
 
-        plt.suptitle(name)
-
+        plt.suptitle(name[0].split('/')[-1])
+        # plt.show()
         plt.pause(0.5)  # 显示秒数
 
         plt.close()

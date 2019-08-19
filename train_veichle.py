@@ -85,14 +85,16 @@ if __name__ == '__main__':
     valloss = 0.
     escount = []
     gtcount = []
+    bs = 4
     vallossdata = 0.
     trainlossdata = 0.
     best_loss = float('inf')
     best_mae = float('inf')
     best_mse = float('inf')
+    best_mae_epoch = -1
     finetune = False
-    dataset = 'vechile'
-    method = 'can_720_zero_newloss'
+    dataset = 'SHTA_'
+    method = dataset+'can_zero_depth_gt'
     resume = False
     startepoch = 0
     current_dir = os.getcwd()
@@ -122,17 +124,17 @@ if __name__ == '__main__':
     logger.addHandler(fh)
     logger.addHandler(ch)
 
-    trainim_file = '/media/xwj/xwjdata1TA/Dataset/vehicle/train_set/images'
-    traingt_file = '/media/xwj/xwjdata1TA/Dataset/vehicle/train_set/ground_truth'
-    valim_file = '/media/xwj/xwjdata1TA/Dataset/vehicle/val_set/images'
-    valgt_file = '/media/xwj/xwjdata1TA/Dataset/vehicle/val_set/ground_truth'
+    trainim_file = '/media/xwj/xwjdata1TA/Dataset/vehicle/original/train_set/images/'
+    traingt_file = '/media/xwj/xwjdata1TA/Dataset/vehicle/new_mega_gt/train/'
+    valim_file = '/media/xwj/xwjdata1TA/Dataset/vehicle/original/val_set/images/'
+    valgt_file = '/media/xwj/xwjdata1TA/Dataset/vehicle/new_mega_gt/val/'
 
 
 
-    train_data = veichle(trainim_file,traingt_file,preload=True,resize=720,phase = 'train')
-    val_data = veichle(valim_file,valgt_file,preload=True,resize=720,phase = 'val')
+    train_data = veichleDepth(trainim_file,traingt_file,preload=False,phase = 'train')
+    val_data = veichleDepth(valim_file,valgt_file,preload=False,phase = 'val')
 
-    train_loader = DataLoader(train_data,batch_size=1,shuffle=True,num_workers=0)
+    train_loader = DataLoader(train_data,batch_size=bs,shuffle=True,num_workers=0)
     val_loader = DataLoader(val_data,batch_size=1,shuffle=False,num_workers=0)
 
 
@@ -149,13 +151,14 @@ if __name__ == '__main__':
         cprint("=> loaded checkpoint ",color='yellow')
 
     optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, net.parameters()), lr=lr,weight_decay=0.9)
-    scheduler = lr_scheduler.ExponentialLR(optimizer,gamma=0.9)
+    scheduler = lr_scheduler.ExponentialLR(optimizer,gamma=0.95)
     net.cuda()
     net.train()
 
-    LOSS = SANetLoss(1).cuda()
-    VALLOSS = SANetLoss(1).cuda()
-
+    # LOSS = SANetLoss(1).cuda()
+    # VALLOSS = SANetLoss(1).cuda()
+    LOSS = nn.MSELoss(size_average=False).cuda()
+    VALLOSS = nn.MSELoss(size_average=False).cuda()
     logger.info('@@@@@@ START AT : %s @@@@@'%(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
 
     logger.info(method)
@@ -173,7 +176,7 @@ if __name__ == '__main__':
         trainstart = time.time()
         step = 0.
         net.train()
-        for index,(img,den) in tqdm(enumerate(train_loader)):
+        for index,(img,den,name) in tqdm(enumerate(train_loader)):
             step +=1
             img = img.cuda()
             den = den.cuda()
@@ -192,7 +195,7 @@ if __name__ == '__main__':
             escount.append(es_count)
             gtcount.append(gt_count)
             if index % 100 ==0:
-                print ('[%d]@[loss: %.3f - es_count:%.3f - gt_count:%.3f]'%(index,loss.item(),es_count,gt_count))
+                print ('[%d / %d]@[loss: %.3f - es_count:%.3f - gt_count:%.3f]'%(index,len(train_loader),loss.item(),es_count,gt_count))
         durantion = time.time()-trainstart
         trainfps = step/durantion
 
@@ -210,7 +213,7 @@ if __name__ == '__main__':
         with torch.no_grad():
             net.eval()
             time_stamp = 0.0
-            for index,(timg,tden) in tqdm(enumerate(val_loader)):
+            for index,(timg,tden,name) in tqdm(enumerate(val_loader)):
                 start = time.time()
                 timg = timg.cuda()
                 tden = tden.cuda()
@@ -228,7 +231,7 @@ if __name__ == '__main__':
                 durantion = time.time()-start
                 time_stamp+=durantion
                 plt.ion()
-                if index % 60 ==0 and epoch % 10 == 0 :
+                if index % 60 ==0 and epoch % 9 == 0 :
 
 
                     plt.subplot(131)
@@ -262,13 +265,15 @@ if __name__ == '__main__':
             'epoch': epoch + 1,
             'state_dict':net.state_dict(),
             'best_loss': valloss.avg,
-             'lr':get_learning_rate(optimizer)
+             'lr':get_learning_rate(optimizer),
+            'mse':valmae
         }
 
-
+        torch.save(losssave,savemodel+'/latest-checkpoint.pth')
         if best_mae>valmae:
             best_mae = valmae
-            torch.save(losssave, savemodel + '/best_loss_mae_' + method + '.pth')
+            best_mae_epoch = epoch
+            torch.save(losssave, savemodel + '/loss_mae_' + method + '.pth')
         writer.add_scalars('data/loss', {
             'trainloss': trainloss.avg,
             'valloss': valloss.avg}, epoch)
@@ -280,9 +285,10 @@ if __name__ == '__main__':
             'trainmae': trainmae
         }, epoch)
         logger.info(info)
+        logger.info('rightnow : best_mae:%.3f -- best_mse:%.3f \n' % (best_mae, best_mae_epoch))
 
     logger.info(method+' train complete')
-    logger.info('best_loss:%.2f-- best_mae:%.2f -- best_mse:%.2f \n'%(best_loss*10000,best_mae,best_mse))
+    logger.info('whole best_loss:%.2f-- best_mae:%.2f -- best_mse:%.2f \n'%(best_loss*10000,best_mae,best_mse))
     logger.info('save bestmodel to '+savemodel)
 
 

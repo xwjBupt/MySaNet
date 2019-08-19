@@ -78,7 +78,7 @@ if __name__ == '__main__':
     save = 50
     log_interval = 250
     lr = 0.000001
-    epochs = 100
+    epochs = 30
     step = 0
     valloss = 0.
     escount = []
@@ -90,7 +90,7 @@ if __name__ == '__main__':
     best_mse = float('inf')
     finetune = False
     dataset = 'vechile'
-    method = 'can_1080_zero'
+    method = 'can_1080_zero_newgt'
     resume = False
     startepoch = 0
     current_dir = os.getcwd()
@@ -127,8 +127,8 @@ if __name__ == '__main__':
 
 
 
-    train_data = veichle(trainim_file,traingt_file,preload=True,resize=1080,phase = 'train')
-    val_data = veichle(valim_file,valgt_file,preload=False,resize=1080,phase = 'val')
+    train_data = veichle(trainim_file,traingt_file,preload=False,resize=1920,phase = 'train')
+    val_data = veichle(valim_file,valgt_file,preload=False,resize=1920,phase = 'val')
 
     train_loader = DataLoader(train_data,batch_size=1,shuffle=True,num_workers=0)
     val_loader = DataLoader(val_data,batch_size=1,shuffle=False,num_workers=0)
@@ -153,8 +153,8 @@ if __name__ == '__main__':
 
     LOSS = Myloss()
     VALLOSS = Myloss()
-
-    logger.info('@@@@@@ START AT : %s @@@@@'%(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+    logger.info('\n\n\n')
+    logger.info('@@@@@@ START  TRAIN  AT : %s @@@@@'%(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
 
     logger.info(method)
     for epoch in range(0,epochs):
@@ -224,7 +224,7 @@ if __name__ == '__main__':
                 durantion = time.time()-start
                 time_stamp+=durantion
 
-                if index % 60 ==0 and epoch % 10 == 0 :
+                if index % 60 ==0 and epoch % 50 == 0 :
 
 
                     plt.subplot(131)
